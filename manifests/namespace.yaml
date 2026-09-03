@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    # Enforce the restricted pod security standard. Everything in here has to
+    # run non-root with no extra capabilities.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
