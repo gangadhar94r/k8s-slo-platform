@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: observability
+data:
+  alertmanager.yml: |
+    # The whole point of the two severities: page goes to a human now, ticket
+    # goes to a queue someone reads on Monday. If everything paged, nothing
+    # would get read.
+    route:
+      receiver: ticket-queue
+      group_by: ["service", "slo", "severity"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - matchers:
+            - severity = "page"
+          receiver: oncall
+          group_wait: 10s
+          repeat_interval: 1h
+
+    inhibit_rules:
+      # No point raising a ticket about a service that is already paging.
+      - source_matchers:
+          - severity = "page"
+        target_matchers:
+          - severity = "ticket"
+        equal: ["service", "slo"]
+
+    receivers:
+      - name: oncall
+        webhook_configs:
+          - url: http://example.internal/hooks/pagerduty
+            send_resolved: true
+
+      - name: ticket-queue
+        webhook_configs:
+          - url: http://example.internal/hooks/tickets
+            send_resolved: false
