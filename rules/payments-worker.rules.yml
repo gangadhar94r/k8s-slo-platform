@@ -1,0 +1,134 @@
+# Same shape as checkout-api, different objective (99.5%, so a 0.005 budget)
+# and a job-outcome SLI instead of HTTP status codes.
+
+groups:
+  - name: payments-worker.job-success.sli
+    interval: 30s
+    rules:
+      - record: slo:sli_error:ratio_rate5m
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[5m]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[5m]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:sli_error:ratio_rate30m
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[30m]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[30m]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:sli_error:ratio_rate1h
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[1h]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[1h]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:sli_error:ratio_rate2h
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[2h]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[2h]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:sli_error:ratio_rate6h
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[6h]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[6h]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:sli_error:ratio_rate1d
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[1d]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[1d]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:sli_error:ratio_rate3d
+        expr: |
+          sum(rate(job_runs_total{job="payments-worker",result!="success"}[3d]))
+          /
+          sum(rate(job_runs_total{job="payments-worker"}[3d]))
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:error_budget:remaining_ratio
+        expr: |
+          1 - (
+            sum(rate(job_runs_total{job="payments-worker",result!="success"}[30d]))
+            /
+            sum(rate(job_runs_total{job="payments-worker"}[30d]))
+          ) / 0.005
+        labels:
+          service: payments-worker
+          slo: job-success
+
+      - record: slo:objective:ratio
+        expr: vector(0.995)
+        labels:
+          service: payments-worker
+          slo: job-success
+
+  - name: payments-worker.job-success.alerts
+    rules:
+      - alert: SLOBurnRateFast
+        expr: |
+          (
+            slo:sli_error:ratio_rate1h{service="payments-worker",slo="job-success"} > (14.4 * 0.005)
+            and
+            slo:sli_error:ratio_rate5m{service="payments-worker",slo="job-success"} > (14.4 * 0.005)
+          )
+          or
+          (
+            slo:sli_error:ratio_rate6h{service="payments-worker",slo="job-success"} > (6 * 0.005)
+            and
+            slo:sli_error:ratio_rate30m{service="payments-worker",slo="job-success"} > (6 * 0.005)
+          )
+        for: 2m
+        labels:
+          severity: page
+          service: payments-worker
+          slo: job-success
+        annotations:
+          summary: payments-worker is failing settlement jobs
+          description: Job failures are high enough to exhaust the 30 day budget in about two days.
+          runbook: https://example.internal/runbooks/payments-worker
+
+      - alert: SLOBurnRateSlow
+        expr: |
+          (
+            slo:sli_error:ratio_rate1d{service="payments-worker",slo="job-success"} > (3 * 0.005)
+            and
+            slo:sli_error:ratio_rate2h{service="payments-worker",slo="job-success"} > (3 * 0.005)
+          )
+          or
+          (
+            slo:sli_error:ratio_rate3d{service="payments-worker",slo="job-success"} > (1 * 0.005)
+            and
+            slo:sli_error:ratio_rate6h{service="payments-worker",slo="job-success"} > (1 * 0.005)
+          )
+        for: 15m
+        labels:
+          severity: ticket
+          service: payments-worker
+          slo: job-success
+        annotations:
+          summary: payments-worker is slowly burning its job success budget
+          description: A steady trickle of failed jobs. Worth looking at this week.
+          runbook: https://example.internal/runbooks/payments-worker

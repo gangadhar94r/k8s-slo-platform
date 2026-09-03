@@ -1,0 +1,98 @@
+rule_files:
+  - ../payments-worker.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: all jobs succeeding does not alert
+    interval: 1m
+    input_series:
+      - series: 'job_runs_total{job="payments-worker",result="success"}'
+        values: "0+20x240"
+      - series: 'job_runs_total{job="payments-worker",result="error"}'
+        values: "0+0x240"
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: SLOBurnRateSlow
+        exp_alerts: []
+
+  - name: a fifth of jobs failing pages
+    interval: 1m
+    input_series:
+      - series: 'job_runs_total{job="payments-worker",result="success"}'
+        values: "0+16x240"
+      - series: 'job_runs_total{job="payments-worker",result="error"}'
+        values: "0+4x240"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SLOBurnRateFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: payments-worker
+              slo: job-success
+            exp_annotations:
+              summary: payments-worker is failing settlement jobs
+              description: Job failures are high enough to exhaust the 30 day budget in about two days.
+              runbook: https://example.internal/runbooks/payments-worker
+
+  # 2% failures against a 0.5% budget is 4x: over the 3x ticket threshold but
+  # under the 14.4x page threshold. This is the case that most often gets a
+  # threshold alert wrong in both directions.
+  - name: two percent failures ticket without paging
+    interval: 1m
+    input_series:
+      - series: 'job_runs_total{job="payments-worker",result="success"}'
+        values: "0+98x1560"
+      - series: 'job_runs_total{job="payments-worker",result="error"}'
+        values: "0+2x1560"
+    alert_rule_test:
+      - eval_time: 1500m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+      - eval_time: 1500m
+        alertname: SLOBurnRateSlow
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: payments-worker
+              slo: job-success
+            exp_annotations:
+              summary: payments-worker is slowly burning its job success budget
+              description: A steady trickle of failed jobs. Worth looking at this week.
+              runbook: https://example.internal/runbooks/payments-worker
+
+  # The looser objective should tolerate a failure rate that would page
+  # checkout-api, which runs to 99.9%.
+  - name: point four percent failures is inside budget
+    interval: 1m
+    input_series:
+      - series: 'job_runs_total{job="payments-worker",result="success"}'
+        values: "0+249x1560"
+      - series: 'job_runs_total{job="payments-worker",result="error"}'
+        values: "0+1x1560"
+    alert_rule_test:
+      - eval_time: 1500m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+      - eval_time: 1500m
+        alertname: SLOBurnRateSlow
+        exp_alerts: []
+
+  - name: budget remaining reflects the looser objective
+    interval: 1m
+    input_series:
+      - series: 'job_runs_total{job="payments-worker",result="success"}'
+        values: "0+499x1560"
+      - series: 'job_runs_total{job="payments-worker",result="error"}'
+        values: "0+1x1560"
+    promql_expr_test:
+      # 0.2% failures against a 0.5% budget leaves 60% of it.
+      - expr: slo:error_budget:remaining_ratio{service="payments-worker",slo="job-success"}
+        eval_time: 1500m
+        exp_samples:
+          - labels: 'slo:error_budget:remaining_ratio{service="payments-worker", slo="job-success"}'
+            value: 0.6
