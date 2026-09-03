@@ -1,0 +1,71 @@
+name: ci
+
+# None of this needs a cluster or credentials, so a PR from a fork gets the
+# whole suite.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rules:
+    name: prometheus rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install promtool
+        run: |
+          version=3.14.0
+          curl -sSL "https://github.com/prometheus/prometheus/releases/download/v${version}/prometheus-${version}.linux-amd64.tar.gz" \
+            | tar xz --strip-components=1 -C /usr/local/bin "prometheus-${version}.linux-amd64/promtool"
+
+      - name: check rule syntax
+        run: promtool check rules rules/*.rules.yml
+
+      - name: unit test alerts
+        run: |
+          for test in rules/tests/*_test.yml; do
+            echo "== $test"
+            promtool test rules "$test"
+          done
+
+  manifests:
+    name: kubernetes manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz \
+            | tar xz -C /usr/local/bin kubeconform
+
+      - name: validate against the kubernetes schema
+        run: kubeconform -strict -summary -schema-location default manifests/
+
+  policy:
+    name: policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: open-policy-agent/setup-conftest@v0.4.0
+
+      - name: unit test policies
+        run: conftest verify --policy policies
+
+      - name: apply policies to manifests
+        run: conftest test --policy policies manifests/
+
+  shell:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck scripts/*.sh
