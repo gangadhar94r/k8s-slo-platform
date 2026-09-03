@@ -1,0 +1,153 @@
+# promtool unit tests for the checkout-api burn-rate alerts.
+#
+# Synthetic series in, assertions about which alerts fire out. No cluster and no
+# Prometheus server involved, so this runs on every pull request.
+#
+# The interesting cases are the ones that should stay quiet: a short blip, and
+# an incident that has already recovered.
+
+rule_files:
+  - ../checkout-api.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ----------------------------------------------------------------- healthy
+  - name: steady traffic with no errors does not alert
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout-api",code="200"}'
+        values: "0+60x240"
+      - series: 'http_requests_total{job="checkout-api",code="500"}'
+        values: "0+0x240"
+    alert_rule_test:
+      - eval_time: 120m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+      - eval_time: 120m
+        alertname: SLOBurnRateSlow
+        exp_alerts: []
+
+  # ---------------------------------------------------------------- fast burn
+  - name: a sustained 30 percent error rate pages
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout-api",code="200"}'
+        values: "0+42x240"
+      - series: 'http_requests_total{job="checkout-api",code="500"}'
+        values: "0+18x240"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SLOBurnRateFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: checkout-api
+              slo: availability
+            exp_annotations:
+              summary: checkout-api is burning its availability budget fast
+              description: Error rate is high enough to exhaust the 30 day budget in about two days. Someone should look now.
+              runbook: https://example.internal/runbooks/checkout-api
+
+  # ------------------------------------------------------------ short window
+  - name: the page clears once errors stop even though the hour window is still dirty
+    interval: 1m
+    input_series:
+      # Errors for the first 30 minutes, then clean traffic.
+      - series: 'http_requests_total{job="checkout-api",code="200"}'
+        values: "0+42x30 1260+60x210"
+      - series: 'http_requests_total{job="checkout-api",code="500"}'
+        values: "0+18x30 540+0x210"
+    alert_rule_test:
+      # Still inside the incident.
+      - eval_time: 29m
+        alertname: SLOBurnRateFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: checkout-api
+              slo: availability
+            exp_annotations:
+              summary: checkout-api is burning its availability budget fast
+              description: Error rate is high enough to exhaust the 30 day budget in about two days. Someone should look now.
+              runbook: https://example.internal/runbooks/checkout-api
+      # Recovered. Both long windows are still dirty, but the 5m and 30m
+      # windows are clean, so the alert resolves instead of hanging around.
+      - eval_time: 70m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+
+  # ------------------------------------------------------------------- blip
+  - name: a three minute blip does not page
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout-api",code="200"}'
+        values: "0+60x10 600+0x3 600+60x230"
+      - series: 'http_requests_total{job="checkout-api",code="500"}'
+        values: "0+0x10 0+60x3 180+0x230"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+
+  # --------------------------------------------------------------- slow burn
+  - name: half a percent of errors raises a ticket but does not page
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout-api",code="200"}'
+        values: "0+199x1560"
+      - series: 'http_requests_total{job="checkout-api",code="500"}'
+        values: "0+1x1560"
+    alert_rule_test:
+      - eval_time: 1500m
+        alertname: SLOBurnRateFast
+        exp_alerts: []
+      - eval_time: 1500m
+        alertname: SLOBurnRateSlow
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: checkout-api
+              slo: availability
+            exp_annotations:
+              summary: checkout-api is slowly burning its availability budget
+              description: Not urgent, but the budget will run out before the window resets if this continues.
+              runbook: https://example.internal/runbooks/checkout-api
+
+  # ---------------------------------------------------------------- latency
+  - name: half the requests over 300ms pages on the latency slo
+    interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_count{job="checkout-api"}'
+        values: "0+100x240"
+      - series: 'http_request_duration_seconds_bucket{job="checkout-api",le="0.3"}'
+        values: "0+50x240"
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SLOBurnRateFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: checkout-api
+              slo: latency
+            exp_annotations:
+              summary: checkout-api is burning its latency budget fast
+              description: Too many requests are slower than 300ms.
+              runbook: https://example.internal/runbooks/checkout-api
+
+  # --------------------------------------------------------- budget recording
+  - name: error budget drops as errors accumulate
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{job="checkout-api",code="200"}'
+        values: "0+199x1560"
+      - series: 'http_requests_total{job="checkout-api",code="500"}'
+        values: "0+1x1560"
+    promql_expr_test:
+      # 0.5% errors against a 0.1% budget: five times over, so the remaining
+      # budget should be negative.
+      - expr: slo:error_budget:remaining_ratio{service="checkout-api",slo="availability"}
+        eval_time: 1500m
+        exp_samples:
+          - labels: 'slo:error_budget:remaining_ratio{service="checkout-api", slo="availability"}'
+            value: -4

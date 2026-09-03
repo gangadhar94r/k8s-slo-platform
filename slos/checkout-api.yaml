@@ -1,0 +1,23 @@
+# What a service owner writes. No PromQL, no burn-rate maths.
+# The rules in rules/ are derived from this by hand for now; see README.
+
+service: checkout-api
+team: payments
+runbook: https://example.internal/runbooks/checkout-api
+
+slos:
+  - name: availability
+    description: Requests that did not return a 5xx.
+    objective: 99.9
+    window: 30d
+    sli:
+      good: 'http_requests_total{job="checkout-api",code!~"5.."}'
+      total: 'http_requests_total{job="checkout-api"}'
+
+  - name: latency
+    description: Requests served in under 300ms.
+    objective: 99.0
+    window: 30d
+    sli:
+      good: 'http_request_duration_seconds_bucket{job="checkout-api",le="0.3"}'
+      total: 'http_request_duration_seconds_count{job="checkout-api"}'

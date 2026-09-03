@@ -1,0 +1,190 @@
+# Burn-rate alerting for checkout-api.
+#
+# Two alerts per SLO instead of a threshold:
+#   page   - burning fast enough to blow the month's budget in ~2 days
+#   ticket - burning slowly, will hurt eventually, nobody needs waking up
+#
+# Each condition pairs a long window (is this real?) with a short one (is it
+# still happening?). The short window is what stops an alert hanging around for
+# hours after the incident is over.
+#
+# Factors are the usual 14.4 / 6 / 3 / 1 from the SRE workbook, for a 30d window.
+
+groups:
+  - name: checkout-api.availability.sli
+    interval: 30s
+    rules:
+      - record: slo:sli_error:ratio_rate5m
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[5m]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:sli_error:ratio_rate30m
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[30m]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[30m]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:sli_error:ratio_rate1h
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[1h]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[1h]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:sli_error:ratio_rate2h
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[2h]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[2h]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:sli_error:ratio_rate6h
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[6h]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[6h]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:sli_error:ratio_rate1d
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[1d]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[1d]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:sli_error:ratio_rate3d
+        expr: |
+          sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[3d]))
+          /
+          sum(rate(http_requests_total{job="checkout-api"}[3d]))
+        labels:
+          service: checkout-api
+          slo: availability
+
+      # The number on the dashboard. 1 means untouched, 0 means spent.
+      - record: slo:error_budget:remaining_ratio
+        expr: |
+          1 - (
+            sum(rate(http_requests_total{job="checkout-api",code=~"5.."}[30d]))
+            /
+            sum(rate(http_requests_total{job="checkout-api"}[30d]))
+          ) / 0.001
+        labels:
+          service: checkout-api
+          slo: availability
+
+      - record: slo:objective:ratio
+        expr: vector(0.999)
+        labels:
+          service: checkout-api
+          slo: availability
+
+  - name: checkout-api.availability.alerts
+    rules:
+      - alert: SLOBurnRateFast
+        expr: |
+          (
+            slo:sli_error:ratio_rate1h{service="checkout-api",slo="availability"} > (14.4 * 0.001)
+            and
+            slo:sli_error:ratio_rate5m{service="checkout-api",slo="availability"} > (14.4 * 0.001)
+          )
+          or
+          (
+            slo:sli_error:ratio_rate6h{service="checkout-api",slo="availability"} > (6 * 0.001)
+            and
+            slo:sli_error:ratio_rate30m{service="checkout-api",slo="availability"} > (6 * 0.001)
+          )
+        for: 2m
+        labels:
+          severity: page
+          service: checkout-api
+          slo: availability
+        annotations:
+          summary: checkout-api is burning its availability budget fast
+          description: >-
+            Error rate is high enough to exhaust the 30 day budget in about two
+            days. Someone should look now.
+          runbook: https://example.internal/runbooks/checkout-api
+
+      - alert: SLOBurnRateSlow
+        expr: |
+          (
+            slo:sli_error:ratio_rate1d{service="checkout-api",slo="availability"} > (3 * 0.001)
+            and
+            slo:sli_error:ratio_rate2h{service="checkout-api",slo="availability"} > (3 * 0.001)
+          )
+          or
+          (
+            slo:sli_error:ratio_rate3d{service="checkout-api",slo="availability"} > (1 * 0.001)
+            and
+            slo:sli_error:ratio_rate6h{service="checkout-api",slo="availability"} > (1 * 0.001)
+          )
+        for: 15m
+        labels:
+          severity: ticket
+          service: checkout-api
+          slo: availability
+        annotations:
+          summary: checkout-api is slowly burning its availability budget
+          description: >-
+            Not urgent, but the budget will run out before the window resets if
+            this continues.
+          runbook: https://example.internal/runbooks/checkout-api
+
+  - name: checkout-api.latency.sli
+    interval: 30s
+    rules:
+      - record: slo:sli_error:ratio_rate5m
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{job="checkout-api",le="0.3"}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{job="checkout-api"}[5m]))
+          )
+        labels:
+          service: checkout-api
+          slo: latency
+
+      - record: slo:sli_error:ratio_rate1h
+        expr: |
+          1 - (
+            sum(rate(http_request_duration_seconds_bucket{job="checkout-api",le="0.3"}[1h]))
+            /
+            sum(rate(http_request_duration_seconds_count{job="checkout-api"}[1h]))
+          )
+        labels:
+          service: checkout-api
+          slo: latency
+
+  - name: checkout-api.latency.alerts
+    rules:
+      - alert: SLOBurnRateFast
+        expr: |
+          slo:sli_error:ratio_rate1h{service="checkout-api",slo="latency"} > (14.4 * 0.01)
+          and
+          slo:sli_error:ratio_rate5m{service="checkout-api",slo="latency"} > (14.4 * 0.01)
+        for: 2m
+        labels:
+          severity: page
+          service: checkout-api
+          slo: latency
+        annotations:
+          summary: checkout-api is burning its latency budget fast
+          description: Too many requests are slower than 300ms.
+          runbook: https://example.internal/runbooks/checkout-api

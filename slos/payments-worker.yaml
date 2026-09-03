@@ -1,0 +1,15 @@
+# A queue worker rather than an HTTP service, to show the same pattern applies
+# to something that isn't request/response.
+
+service: payments-worker
+team: payments
+runbook: https://example.internal/runbooks/payments-worker
+
+slos:
+  - name: job-success
+    description: Settlement jobs that completed without error.
+    objective: 99.5
+    window: 30d
+    sli:
+      good: 'job_runs_total{job="payments-worker",result="success"}'
+      total: 'job_runs_total{job="payments-worker"}'
