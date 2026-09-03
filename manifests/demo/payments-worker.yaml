@@ -1,6 +1,5 @@
-# Also the example app. It does not emit job_runs_total, so the payments-worker
-# SLO has no real data behind it in this demo; the rules and their tests are
-# what matter here.
+# Same example app. It doesn't emit job_runs_total, so this SLO has no real data
+# behind it here.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

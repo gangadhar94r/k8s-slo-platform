@@ -1,6 +1,5 @@
-# Stand-in workload so the rules have something to scrape. The image exposes
-# http_requests_total and http_request_duration_seconds, which is exactly what
-# the checkout-api SLOs are written against.
+# Stand-in workload. Exposes http_requests_total and
+# http_request_duration_seconds, which is what the SLOs are written against.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

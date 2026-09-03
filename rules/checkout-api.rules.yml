@@ -1,14 +1,6 @@
-# Burn-rate alerting for checkout-api.
-#
-# Two alerts per SLO instead of a threshold:
-#   page   - burning fast enough to blow the month's budget in ~2 days
-#   ticket - burning slowly, will hurt eventually, nobody needs waking up
-#
-# Each condition pairs a long window (is this real?) with a short one (is it
-# still happening?). The short window is what stops an alert hanging around for
-# hours after the incident is over.
-#
-# Factors are the usual 14.4 / 6 / 3 / 1 from the SRE workbook, for a 30d window.
+# Burn-rate alerts for checkout-api. Factors are 14.4 / 6 / 3 / 1 from the SRE
+# workbook, for a 30d window. Each condition pairs a long window with a short
+# one so alerts clear when the incident does.
 
 groups:
   - name: checkout-api.availability.sli
@@ -77,7 +69,7 @@ groups:
           service: checkout-api
           slo: availability
 
-      # The number on the dashboard. 1 means untouched, 0 means spent.
+      # 1 means untouched, 0 means spent.
       - record: slo:error_budget:remaining_ratio
         expr: |
           1 - (

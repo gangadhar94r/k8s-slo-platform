@@ -5,9 +5,7 @@ metadata:
   namespace: observability
 data:
   alertmanager.yml: |
-    # The whole point of the two severities: page goes to a human now, ticket
-    # goes to a queue someone reads on Monday. If everything paged, nothing
-    # would get read.
+    # page goes to a human now, ticket goes to a queue.
     route:
       receiver: ticket-queue
       group_by: ["service", "slo", "severity"]
@@ -22,7 +20,7 @@ data:
           repeat_interval: 1h
 
     inhibit_rules:
-      # No point raising a ticket about a service that is already paging.
+      # Don't ticket something that's already paging.
       - source_matchers:
           - severity = "page"
         target_matchers:

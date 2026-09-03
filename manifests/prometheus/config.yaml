@@ -10,8 +10,7 @@ data:
       evaluation_interval: 30s
 
     rule_files:
-      # Mounted from the slo-rules ConfigMap, which is built straight from the
-      # rules/ directory in this repo. See the README.
+      # From the slo-rules ConfigMap, built out of rules/.
       - /etc/prometheus/rules/*.yml
 
     alerting:
@@ -24,8 +23,7 @@ data:
         static_configs:
           - targets: ["localhost:9090"]
 
-      # Pods opt in with prometheus.io/scrape. The job label is set from the
-      # app label so it matches the job= selectors in the SLO rules.
+      # job comes from the app label so it matches the job= selectors in the rules.
       - job_name: kubernetes-pods
         kubernetes_sd_configs:
           - role: pod

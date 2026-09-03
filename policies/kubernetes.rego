@@ -1,8 +1,5 @@
-# Guardrails for anything deployed into the platform.
-#
-# These are the rules that are tedious to enforce in review and trivial to
-# enforce in CI. Each one exists because forgetting it has a specific
-# consequence, noted above the rule.
+# Guardrails for anything deployed into the platform. Tedious to catch in
+# review, trivial to catch in CI.
 
 package main
 
@@ -19,7 +16,7 @@ containers contains container if {
 
 pod_security_context := object.get(input, ["spec", "template", "spec", "securityContext"], {})
 
-# A container with no memory limit can take the whole node down with it.
+# No memory limit means one container can take the node down.
 deny contains msg if {
 	some container in containers
 	not container.resources.limits.memory
@@ -32,16 +29,15 @@ deny contains msg if {
 	msg := sprintf("%s/%s: container %q has no memory request, so the scheduler is guessing", [input.kind, input.metadata.name, container.name])
 }
 
-# Without a readiness probe, traffic is sent to a pod that is not ready yet,
-# and every rolling update causes a burst of errors that eats the error budget.
+# No readiness probe means every rolling update sends traffic to pods that
+# aren't ready, which shows up as errors against the SLO.
 deny contains msg if {
 	some container in containers
 	not container.readinessProbe
 	msg := sprintf("%s/%s: container %q has no readiness probe", [input.kind, input.metadata.name, container.name])
 }
 
-# Without a liveness probe, a wedged process stays in the Service endpoints
-# forever and nothing restarts it.
+# No liveness probe means a wedged process stays in the endpoints forever.
 deny contains msg if {
 	some container in containers
 	not container.livenessProbe
@@ -66,8 +62,7 @@ deny contains msg if {
 	msg := sprintf("%s/%s: container %q does not drop ALL capabilities", [input.kind, input.metadata.name, container.name])
 }
 
-# A moving tag means the thing running in production is not the thing that was
-# reviewed, and a rollback does not necessarily roll anything back.
+# A moving tag means what's running isn't what was reviewed.
 deny contains msg if {
 	some container in containers
 	endswith(container.image, ":latest")
@@ -80,16 +75,14 @@ deny contains msg if {
 	msg := sprintf("%s/%s: container %q has an untagged image", [input.kind, input.metadata.name, container.name])
 }
 
-# Not a hard failure: a read-only root filesystem is right for most workloads
-# but genuinely awkward for some, so this is a nudge rather than a block.
+# Warn, not deny. Right for most workloads, awkward for some.
 warn contains msg if {
 	some container in containers
 	not container.securityContext.readOnlyRootFilesystem
 	msg := sprintf("%s/%s: container %q has a writable root filesystem", [input.kind, input.metadata.name, container.name])
 }
 
-# A workload nobody scrapes cannot have an SLO, and a service with no SLO is one
-# nobody will notice breaking.
+# No scrape means no SLO, and no SLO means nobody notices it breaking.
 warn contains msg if {
 	input.kind == "Deployment"
 	not input.spec.template.metadata.annotations["prometheus.io/scrape"]

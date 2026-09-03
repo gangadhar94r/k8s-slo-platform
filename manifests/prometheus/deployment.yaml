@@ -75,7 +75,6 @@ spec:
         - name: rules
           configMap:
             name: slo-rules
-        # emptyDir keeps this demo simple. Anything you care about wants a
-        # PersistentVolumeClaim, or remote write to something durable.
+        # Fine for a demo. Anything real wants a PVC or remote write.
         - name: data
           emptyDir: {}

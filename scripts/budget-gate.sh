@@ -1,15 +1,13 @@
 #!/usr/bin/env bash
 #
-# Release gate. Refuses to deploy a service that has already spent its error
-# budget, so shipping into a burning service is a deliberate override rather
-# than the default.
+# Refuses to deploy a service that's already spent its error budget.
 #
 #   ./scripts/budget-gate.sh checkout-api availability
 #   ./scripts/budget-gate.sh checkout-api availability 0.20
 #
-# Exits 0 to proceed, 1 to block, 2 if the budget could not be read. The
-# difference matters: a broken Prometheus should not silently wave deploys
-# through, and it should not block them either without saying why.
+# 0 = go, 1 = blocked, 2 = couldn't read the budget. Keeping 1 and 2 separate
+# matters: a broken Prometheus shouldn't wave deploys through, and shouldn't
+# block them without saying why.
 
 set -euo pipefail
 
